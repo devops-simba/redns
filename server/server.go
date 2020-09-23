@@ -88,7 +88,7 @@ func (this *DNSServer) ServeDNS(w dns.ResponseWriter, msg *dns.Msg) {
 		m.Answer = append(m.Answer, SOA(".", &definitions.DNSRecord{
 			NSRecords: &definitions.DNS_STRING_Record{
 				Addresses: []definitions.DNS_STRING_Address{
-					DNS_STRING_Address{
+					definitions.DNS_STRING_Address{
 						Value: "dns.cloud.snapp.ir",
 					},
 				},
