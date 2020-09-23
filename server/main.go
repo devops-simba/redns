@@ -16,15 +16,15 @@ func main() {
 	flag.Parse()
 
 	if *port == 0 || *port > 65535 {
-		log.Fatalf("[FTL] %v is not a valid port number", *port)
+		log.Fatalf("%v is not a valid port number", *port)
 	}
 	if len(*redisServerUrl) == 0 {
-		log.Fatal("[FTL] Missing redis db address")
+		log.Fatal("Missing redis db address")
 	}
 
 	db, err := NewRedisDNSDatabase(*redisServerUrl)
 	if err != nil {
-		log.Fatalf("[FTL] Error in opening REDIS db: %v", err)
+		log.Fatalf("Error in opening REDIS db: %v", err)
 	}
 
 	stopRequestedChan := make(chan os.Signal, 1)
@@ -34,22 +34,22 @@ func main() {
 	serverStopped := runServer(server)
 	select {
 	case <-stopRequestedChan:
-		log.Printf("[INF] Got OS shutdown signal, shutting down DNS server gracefully...")
+		log.Info("Got OS shutdown signal, shutting down DNS server gracefully...")
 		server.Shutdown()
 
-	case <-serverStopped:
-		log.Print("[ERR] Server stopped unexpectedly")
+	case err = <-serverStopped:
+		log.Warningf("Server stopped unexpectedly: %v", err)
 	}
 }
 
-func runServer(server *DNSServer) chan bool {
-	stopped := make(chan bool, 1)
+func runServer(server *DNSServer) chan error {
+	stopped := make(chan error, 1)
 	go func() {
 		err := server.Start()
 		if err != nil {
-			log.Printf("[ERR] Error in starting server: %v", err)
+			log.Errorf("Error in starting server: %v", err)
 		}
-		stopped <- true
+		stopped <- err
 	}()
 
 	return stopped
