@@ -57,8 +57,8 @@ func NewDNS_STRING_Address(value string, weight uint16, ttl uint32) DNS_STRING_A
 
 func (this DNS_STRING_Address) ToCNAME(name string) dns.RR {
 	return &dns.CNAME{
-		Hdr:   this.createRRHeader(name, dns.TypeCNAME),
-		Value: this.Value,
+		Hdr:    this.createRRHeader(name, dns.TypeCNAME),
+		Target: this.Value,
 	}
 }
 func (this DNS_STRING_Address) ToNS(name string) dns.RR {
