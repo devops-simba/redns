@@ -20,7 +20,7 @@ type Application struct {
 	Redis    *redis.Client
 	Action   Command
 	Domain   string
-	Title    string
+	Name     string
 	Kind     Kind
 	Multi    Bool3
 	TTL      int
@@ -60,8 +60,8 @@ func CreateApplicationFromArgs() *Application {
 		fmt.Sprintf("Action that must executed on the server. Acceptable values are {%s}",
 			strings.Join(ValidCommands, "|")))
 	flag.StringVar(&app.Domain, "domain", "cloud.snapp.ir", "Domain of the record")
-	flag.StringVar(&app.Title, "title", "",
-		"Title of the record. This will be added to the domain to create the address")
+	flag.StringVar(&app.Name, "name", "",
+		"Name of the record. This will be added to the domain to create the address")
 	flag.Var(&app.Kind, "kind",
 		fmt.Sprintf("Kind of the record. Acceptable values are {%s}",
 			strings.Join(ValidKinds, "|")))
@@ -71,7 +71,7 @@ func CreateApplicationFromArgs() *Application {
 	flag.Var(&app.Healthy, "healthy", "Is this record healthy?")
 	flag.Var(&app.Weight, "weight", "Weight of the record")
 	flag.Var(&app.IP, "ip", "IP of the record")
-	flag.StringVar(&app.Value, "value", "", "Value for CNAME/NS/TXT/SRV.Target/MX.MBOX")
+	flag.StringVar(&app.Value, "value", "", "Value for CNAME/NS/TXT/SRV/MX")
 	flag.Var(&app.Port, "port", "Port of the server")
 	flag.Var(&app.Priority, "priority", "Priority of the SRV or MX record")
 	flag.Parse()
@@ -83,8 +83,12 @@ func CreateApplicationFromArgs() *Application {
 		// all commands except `get` require the domain
 		log.Fatal("Domain is required")
 	}
-	if app.Title == "" && app.Action != RemoveCommand && app.Action != GetCommand {
-		log.Fatal("Title is required")
+	if app.Name == "" {
+		if app.Action != RemoveCommand && app.Action != GetCommand {
+			log.Fatal("Name is required")
+		}
+	} else if app.Domain == "" {
+		log.Fatal("Domain is required")
 	}
 	if app.Kind == Kind_Empty && app.Action != RemoveCommand && app.Action != GetCommand {
 		log.Fatal("Kind is required")
@@ -101,18 +105,18 @@ func CreateApplicationFromArgs() *Application {
 
 	// Domain names are case insensitive
 	app.Domain = strings.ToLower(app.Domain)
-	app.Title = strings.ToLower(app.Title)
+	app.Name = strings.ToLower(app.Name)
 
 	return app
 }
 
 func (this *Application) GetKey() string {
-	if this.Title == "@" || this.Title == "" {
+	if this.Name == "@" || this.Name == "" {
 		return this.Domain
-	} else if this.Title == "*" {
+	} else if this.Name == "*" {
 		return "$." + this.Domain
 	} else {
-		return this.Title + "." + this.Domain
+		return this.Name + "." + this.Domain
 	}
 }
 func (this *Application) ReadRecord(key string, checkDomain bool) (*definitions.DNSRecord, error) {
@@ -237,10 +241,10 @@ func (this *Application) update_STR_Address(addr *definitions.DNS_STRING_Address
 func (this *Application) create_MX_Address() (*definitions.DNS_MX_Address, error) {
 	result := &definitions.DNS_MX_Address{
 		DNS_Address: this.create_Address(),
-		Server:      this.Value,
+		Value:       this.Value,
 		Priority:    1,
 	}
-	if result.Server == "" {
+	if result.Value == "" {
 		return nil, errors.New("Missing value(server address)")
 	}
 	return result, nil
@@ -248,7 +252,7 @@ func (this *Application) create_MX_Address() (*definitions.DNS_MX_Address, error
 func (this *Application) update_MX_Address(addr *definitions.DNS_MX_Address) bool {
 	result := this.update_Address(&addr.DNS_Address)
 	if this.Value != "" {
-		addr.Server = this.Value
+		addr.Value = this.Value
 		result = true
 	}
 	if this.Priority != InvalidWord {
@@ -261,12 +265,12 @@ func (this *Application) update_MX_Address(addr *definitions.DNS_MX_Address) boo
 func (this *Application) create_SRV_Address() (*definitions.DNS_SRV_Address, error) {
 	result := &definitions.DNS_SRV_Address{
 		DNS_Address: this.create_Address(),
-		Target:      this.Value,
+		Value:       this.Value,
 		Port:        uint16(this.Port),
 		Priority:    1,
 	}
-	if result.Target == "" {
-		return nil, errors.New("Missing value(target of the service)")
+	if result.Value == "" {
+		return nil, errors.New("Missing value(server of the service)")
 	}
 	if this.Port == InvalidWord {
 		return nil, errors.New("Missing port")
@@ -279,7 +283,7 @@ func (this *Application) create_SRV_Address() (*definitions.DNS_SRV_Address, err
 func (this *Application) update_SRV_Address(addr *definitions.DNS_SRV_Address) bool {
 	result := this.update_Address(&addr.DNS_Address)
 	if this.Value != "" {
-		addr.Target = this.Value
+		addr.Value = this.Value
 		result = true
 	}
 	if this.Port != InvalidWord {
@@ -368,7 +372,7 @@ func (this *Application) add_MX(rec *definitions.DNSRecord) error {
 	// search for a record with this value
 	index := -1
 	for i := 0; i < len(rec.MXRecords.Addresses); i++ {
-		if rec.MXRecords.Addresses[i].Server == this.Value {
+		if rec.MXRecords.Addresses[i].Value == this.Value {
 			index = i
 			break
 		}
@@ -411,7 +415,7 @@ func (this *Application) add_SRV(rec *definitions.DNSRecord) error {
 	index := -1
 	port := uint16(this.Port)
 	for i := 0; i < len(rec.SRVRecords.Addresses); i++ {
-		if rec.SRVRecords.Addresses[i].Target == this.Value && rec.SRVRecords.Addresses[i].Port == port {
+		if rec.SRVRecords.Addresses[i].Value == this.Value && rec.SRVRecords.Addresses[i].Port == port {
 			index = i
 			break
 		}
@@ -645,7 +649,7 @@ func (this *Application) remove_Domain() ([]string, error) {
 
 	return deleted_keys, nil
 }
-func (this *Application) remove_Title() ([]string, error) {
+func (this *Application) remove_Name() ([]string, error) {
 	key := this.GetKey()
 	deleted, err := this.Redis.Del(key)
 	if err != nil {
@@ -769,13 +773,13 @@ func (this *Application) remove_MX(rec *definitions.DNSRecord) ([]string, error)
 		// remove all records
 		deleted_records = append(deleted_records, base_name)
 		for _, addr := range rec.MXRecords.Addresses {
-			deleted_records = append(deleted_records, base_name+"::"+addr.Server)
+			deleted_records = append(deleted_records, base_name+"::"+addr.Value)
 		}
 		rec.MXRecords = nil
 	} else {
 		// find out this specific Value and remove it
 		for i, addr := range rec.MXRecords.Addresses {
-			if addr.Server == this.Value {
+			if addr.Value == this.Value {
 				if len(rec.MXRecords.Addresses) == 1 {
 					if rec.MXRecords.Weighted {
 						// if this is a weighted record, only delete the address
@@ -820,14 +824,14 @@ func (this *Application) remove_SRV(rec *definitions.DNSRecord) ([]string, error
 		// remove all records
 		deleted_records = append(deleted_records, base_name)
 		for _, addr := range rec.SRVRecords.Addresses {
-			deleted_records = append(deleted_records, fmt.Sprintf("%s::%s:%v", base_name, addr.Target, addr.Port))
+			deleted_records = append(deleted_records, fmt.Sprintf("%s::%s:%v", base_name, addr.Value, addr.Port))
 		}
 		rec.SRVRecords = nil
 	} else {
 		// find out this specific Value and remove it
 		port := uint16(this.Port)
 		for i, addr := range rec.SRVRecords.Addresses {
-			if addr.Target == this.Value && addr.Port == port {
+			if addr.Value == this.Value && addr.Port == port {
 				if len(rec.SRVRecords.Addresses) == 1 {
 					rec.SRVRecords = nil
 				} else {
@@ -879,19 +883,25 @@ func (this *Application) remove() ([]string, error) {
 	if this.haveBaseAddressParams() || this.Multi != None {
 		return nil, errors.New("Invalid options")
 	}
-	if this.Title == "" {
+	if this.Name == "" {
 		return this.remove_Domain()
 	}
 	if this.Kind == Kind_Empty {
-		return this.remove_Title()
+		return this.remove_Name()
 	}
 	return this.remove_Kind()
 }
 
 func (this *Application) get() error {
-	if this.Title == "" {
+	if this.Name == "" {
 	}
 	keys, err := this.Redis.Keys("*")
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+
+	}
 	return nil
 }
 

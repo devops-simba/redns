@@ -57,8 +57,8 @@ func NewDNS_STRING_Address(value string, weight uint16, ttl uint32) DNS_STRING_A
 
 func (this DNS_STRING_Address) ToCNAME(name string) dns.RR {
 	return &dns.CNAME{
-		Hdr:    this.createRRHeader(name, dns.TypeCNAME),
-		Target: this.Value,
+		Hdr:   this.createRRHeader(name, dns.TypeCNAME),
+		Value: this.Value,
 	}
 }
 func (this DNS_STRING_Address) ToNS(name string) dns.RR {
@@ -76,15 +76,15 @@ func (this DNS_STRING_Address) ToTXT(name string) dns.RR {
 
 type DNS_SRV_Address struct {
 	DNS_Address `json:",inline"`
-	Target      string `json:"target"`
+	Value       string `json:"value"`
 	Port        uint16 `json:"port"`
 	Priority    uint16 `json:"priority"`
 }
 
-func NewDNS_SRV_Address(target string, port uint16, priority uint16, weight uint16, ttl uint32) DNS_SRV_Address {
+func NewDNS_SRV_Address(value string, port uint16, priority uint16, weight uint16, ttl uint32) DNS_SRV_Address {
 	return DNS_SRV_Address{
 		DNS_Address: DNS_Address{TTL: ttl, Enabled: true, Healthy: true, Weight: weight},
-		Target:      target,
+		Value:       value,
 		Port:        port,
 		Priority:    priority,
 	}
@@ -93,7 +93,7 @@ func NewDNS_SRV_Address(target string, port uint16, priority uint16, weight uint
 func (this DNS_SRV_Address) ToSRV(name string) dns.RR {
 	return &dns.SRV{
 		Hdr:      this.createRRHeader(name, dns.TypeSRV),
-		Target:   this.Target,
+		Target:   this.Value,
 		Port:     this.Port,
 		Priority: this.Priority,
 	}
@@ -101,14 +101,14 @@ func (this DNS_SRV_Address) ToSRV(name string) dns.RR {
 
 type DNS_MX_Address struct {
 	DNS_Address `json:",inline"`
-	Server      string `json:"server"`
+	Value       string `json:"value"`
 	Priority    uint16 `json:"priority"`
 }
 
-func NewDNS_MX_Address(server string, priority uint16, weight uint16, ttl uint32) DNS_MX_Address {
+func NewDNS_MX_Address(value string, priority uint16, weight uint16, ttl uint32) DNS_MX_Address {
 	return DNS_MX_Address{
 		DNS_Address: DNS_Address{TTL: ttl, Enabled: true, Healthy: true, Weight: weight},
-		Server:      server,
+		Value:       value,
 		Priority:    priority,
 	}
 }
@@ -116,7 +116,7 @@ func NewDNS_MX_Address(server string, priority uint16, weight uint16, ttl uint32
 func (this DNS_MX_Address) ToMX(name string) dns.RR {
 	return &dns.MX{
 		Hdr:        this.createRRHeader(name, dns.TypeMX),
-		Mx:         this.Server,
+		Mx:         this.Value,
 		Preference: this.Priority,
 	}
 }
@@ -380,7 +380,7 @@ func (this *DNS_SRV_Record) ToSRVList(name string) []dns.RR {
 }
 
 type DNSRecord struct {
-	// Title of this record
+	// Domain of this record
 	Domain string `json:"domain"`
 
 	// If this is an A record, then this is A record's information
