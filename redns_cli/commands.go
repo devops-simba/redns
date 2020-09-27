@@ -19,7 +19,7 @@ type CommandArgs struct {
 	Domain DomainName
 	Name   SubdomainName
 	Kind   Kind
-	Value  string
+	Value  CommaSeparatedValue
 
 	TTL      Word
 	Weight   Word

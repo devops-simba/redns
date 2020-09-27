@@ -9,6 +9,7 @@ import (
 
 type DomainName []string
 type SubdomainName = DomainName
+type CommaSeparatedValue []string
 type Kind []string
 type Word uint16
 type Bool3 uint8
@@ -55,11 +56,28 @@ func (this *DomainName) Set(value string) error {
 
 //endregion
 
+//region CommaSeparatedValue
+func (this *CommaSeparatedValue) String() string { return strings.Join(*this, ",") }
+func (this *CommaSeparatedValue) Set(value string) error {
+	if value == "" {
+		*this = []string{}
+		return
+	}
+
+	*this = strings.Split(value, ",")
+	return nil
+}
+func (this *CommaSeparatedValue) Contains(value string) bool { return Contains(*this, value) }
+func (this *CommaSeparatedValue) Append(value ...string)     { *this = append(*this, value...) }
+
+//endregion
+
 //region Kind
 func (this *Kind) String() string { return strings.Join(*this, ",") }
 func (this *Kind) Set(value string) error {
 	if value == "" {
 		*this = []string{}
+		return
 	}
 
 	haveAny := false

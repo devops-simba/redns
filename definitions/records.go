@@ -18,6 +18,11 @@ const (
 	Kind_SRV   = "SRV"
 )
 
+type IDNSAddress interface {
+	GetValue() string
+	BaseAddress() *DNS_Address
+}
+
 type DNS_Address struct {
 	TTL     uint32 `json:"ttl"`
 	Enabled bool   `json:"enabled"`
@@ -41,7 +46,8 @@ func NewDNS_IP_Address(ip string, weight uint16, ttl uint32) DNS_IP_Address {
 	}
 }
 
-func (this DNS_IP_Address) GetValue() string { return this.IP }
+func (this DNS_IP_Address) BaseAddress() *DNS_Address { return &this.DNS_Address }
+func (this DNS_IP_Address) GetValue() string          { return this.IP }
 func (this DNS_IP_Address) ToA(name string) dns.RR {
 	return &dns.A{
 		Hdr: this.createRRHeader(name, dns.TypeA),
@@ -67,7 +73,8 @@ func NewDNS_STRING_Address(value string, weight uint16, ttl uint32) DNS_STRING_A
 	}
 }
 
-func (this DNS_STRING_Address) GetValue() string { return this.Value }
+func (this DNS_STRING_Address) BaseAddress() *DNS_Address { return &this.DNS_Address }
+func (this DNS_STRING_Address) GetValue() string          { return this.Value }
 func (this DNS_STRING_Address) ToCNAME(name string) dns.RR {
 	return &dns.CNAME{
 		Hdr:    this.createRRHeader(name, dns.TypeCNAME),
@@ -103,6 +110,7 @@ func NewDNS_SRV_Address(value string, port uint16, priority uint16, weight uint1
 	}
 }
 
+func (this DNS_SRV_Address) BaseAddress() *DNS_Address { return &this.DNS_Address }
 func (this DNS_SRV_Address) GetValue() string {
 	return fmt.Sprintf("%s:%d", this.Value, int(this.Port))
 }
@@ -129,7 +137,8 @@ func NewDNS_MX_Address(value string, priority uint16, weight uint16, ttl uint32)
 	}
 }
 
-func (this DNS_MX_Address) GetValue() string { return this.Value }
+func (this DNS_MX_Address) BaseAddress() *DNS_Address { return &this.DNS_Address }
+func (this DNS_MX_Address) GetValue() string          { return this.Value }
 func (this DNS_MX_Address) ToMX(name string) dns.RR {
 	return &dns.MX{
 		Hdr:        this.createRRHeader(name, dns.TypeMX),
@@ -446,32 +455,32 @@ type DNSRecord struct {
 
 type DNSAddressPtr struct {
 	Kind string
-	Ptr  *DNS_Address
+	Addr IDNSAddress
 }
 
 // GetAddresses get list of all addresses in a `DNSRecord`
 func (this *DNSRecord) GetAddresses() []DNSAddressPtr {
 	var result []DNSAddressPtr
 	for _, addr := range this.ARecords.GetAddresses() {
-		result = append(result, DNSAddressPtr{Kind: Kind_A, Ptr: &addr.DNS_Address})
+		result = append(result, DNSAddressPtr{Kind: Kind_A, Addr: addr})
 	}
 	for _, addr := range this.AAAARecords.GetAddresses() {
-		result = append(result, DNSAddressPtr{Kind: Kind_AAAA, Ptr: &addr.DNS_Address})
+		result = append(result, DNSAddressPtr{Kind: Kind_AAAA, Addr: addr})
 	}
 	for _, addr := range this.NSRecords.GetAddresses() {
-		result = append(result, DNSAddressPtr{Kind: Kind_NS, Ptr: &addr.DNS_Address})
+		result = append(result, DNSAddressPtr{Kind: Kind_NS, Addr: addr})
 	}
 	for _, addr := range this.TXTRecords.GetAddresses() {
-		result = append(result, DNSAddressPtr{Kind: Kind_TXT, Ptr: &addr.DNS_Address})
+		result = append(result, DNSAddressPtr{Kind: Kind_TXT, Addr: addr})
 	}
 	for _, addr := range this.CNameRecords.GetAddresses() {
-		result = append(result, DNSAddressPtr{Kind: Kind_CNAME, Ptr: &addr.DNS_Address})
+		result = append(result, DNSAddressPtr{Kind: Kind_CNAME, Addr: addr})
 	}
 	for _, addr := range this.MXRecords.GetAddresses() {
-		result = append(result, DNSAddressPtr{Kind: Kind_MX, Ptr: &addr.DNS_Address})
+		result = append(result, DNSAddressPtr{Kind: Kind_MX, Addr: addr})
 	}
 	for _, addr := range this.SRVRecords.GetAddresses() {
-		result = append(result, DNSAddressPtr{Kind: Kind_SRV, Ptr: &addr.DNS_Address})
+		result = append(result, DNSAddressPtr{Kind: Kind_SRV, Addr: addr})
 	}
 	return result
 }

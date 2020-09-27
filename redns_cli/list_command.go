@@ -7,7 +7,7 @@ import (
 type ListCommand struct{}
 type addressPtrWithRecord struct {
 	Kind string
-	Ptr  *definitions.DNS_Address
+	Addr definitions.IDNSAddress
 	Rec  *definitions.DNSRecord
 }
 
@@ -33,27 +33,51 @@ func (this ListCommand) Execute(context DisplayContext, args CommandArgs) error 
 
 	var addresses []addressPtrWithRecord
 	for _, rec := range records {
-		for _, addressPtr := rec.GetAddresses() {
+		for _, addressPtr := range rec.GetAddresses() {
 			if !args.Kind.Contains(addressPtr.Kind) {
 				continue
 			}
-			if args.TTL != InvalidWord && addressPtr.Ptr.TTL != args.TTL {
+			dnsAddress := addressPtr.Addr.BaseAddress()
+			if args.TTL != InvalidWord && dnsAddress.TTL != args.TTL {
 				continue
 			}
-			if args.Enabled != None && addressPtr.Ptr.Enabled != args.Enabled {
+			if args.Enabled != None && dnsAddress.Enabled != args.Enabled {
 				continue
 			}
-			if args.Healthy != None && addressPtr.Ptr.Healthy != args.Healthy {
+			if args.Healthy != None && dnsAddress.Healthy != args.Healthy {
 				continue
 			}
-			if args.Weight != InvalidWord && addressPtr.Ptr.Weight != args.Weight {
+			if args.Weight != InvalidWord && dnsAddress.Weight != args.Weight {
+				continue
+			}
+			switch addressPtr.Kind {
+			case Kind_A, Kind_AAAA, Kind_NS, Kind_TXT, Kind_CNAME:
+				if args.Priority != InvalidWord {
+					continue
+				}
+			case Kind_MX:
+				if args.Priority != InvalidWord {
+					mxAddr, _ := addressPtr.Address.(definitions.DNS_MX_Address)
+					if mxAddr.Priority != mxAddr.Priority {
+						continue
+					}
+				}
+			case Kind_SRV:
+				if args.Priority != InvalidWord {
+					srvAddr, _ := addressPtr.Address.(definitions.DNS_SRV_Address)
+					if srvAddr.Priority != srvAddr.Priority {
+						continue
+					}
+				}
+			}
+			if len(args.Value) != 0 && !args.Value.Contains(addressPtr.Addr.GetValue()) {
 				continue
 			}
 
 			addresses = append(addresses, addressPtrWithRecord{
 				Kind: addressPtr.Kind,
-				Ptr: addressPtr.Ptr,
-				Rec: rec,
+				Addr: addressPtr.Addr,
+				Rec:  rec,
 			})
 		}
 	}
