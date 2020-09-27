@@ -37,6 +37,18 @@ func (this ListCommand) Execute(context DisplayContext, args CommandArgs) error 
 			if !args.Kind.Contains(addressPtr.Kind) {
 				continue
 			}
+			if args.TTL != InvalidWord && addressPtr.Ptr.TTL != args.TTL {
+				continue
+			}
+			if args.Enabled != None && addressPtr.Ptr.Enabled != args.Enabled {
+				continue
+			}
+			if args.Healthy != None && addressPtr.Ptr.Healthy != args.Healthy {
+				continue
+			}
+			if args.Weight != InvalidWord && addressPtr.Ptr.Weight != args.Weight {
+				continue
+			}
 
 			addresses = append(addresses, addressPtrWithRecord{
 				Kind: addressPtr.Kind,
