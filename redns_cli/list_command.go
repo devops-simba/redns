@@ -51,20 +51,20 @@ func (this ListCommand) Execute(context DisplayContext, args CommandArgs) error 
 				continue
 			}
 			switch addressPtr.Kind {
-			case Kind_A, Kind_AAAA, Kind_NS, Kind_TXT, Kind_CNAME:
+			case definitions.Kind_A, definitions.Kind_AAAA, definitions.Kind_NS, definitions.Kind_TXT, definitions.Kind_CNAME:
 				if args.Priority != InvalidWord {
 					continue
 				}
-			case Kind_MX:
+			case definitions.Kind_MX:
 				if args.Priority != InvalidWord {
-					mxAddr, _ := addressPtr.Address.(definitions.DNS_MX_Address)
+					mxAddr, _ := addressPtr.Addr.(definitions.DNS_MX_Address)
 					if mxAddr.Priority != mxAddr.Priority {
 						continue
 					}
 				}
-			case Kind_SRV:
+			case definitions.Kind_SRV:
 				if args.Priority != InvalidWord {
-					srvAddr, _ := addressPtr.Address.(definitions.DNS_SRV_Address)
+					srvAddr, _ := addressPtr.Addr.(definitions.DNS_SRV_Address)
 					if srvAddr.Priority != srvAddr.Priority {
 						continue
 					}
