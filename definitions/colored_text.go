@@ -16,6 +16,8 @@ type ColorContext interface {
 	Name() string
 	Write(color Color, text string) string
 	Writef(color Color, format string, a ...interface{}) string
+	Print(color Color, text string) (int, error)
+	Printf(color Color, format string, a ...interface{}) (int, error)
 }
 
 type ConsoleContext struct{}
@@ -27,6 +29,12 @@ func (this ConsoleContext) Write(color Color, text string) string {
 func (this ConsoleContext) Writef(color Color, format string, a ...interface{}) string {
 	return this.Write(color, fmt.Sprintf(format, a...))
 }
+func (this ConsoleContext) Print(color Color, text string) (int, error) {
+	return fmt.Print(this.Write(color, text))
+}
+func (this ConsoleContext) Printf(color Color, format string, a ...interface{}) (int, error) {
+	return fmt.Print(this.Writef(color, format, a...))
+}
 
 type HTMLContext struct{}
 
@@ -36,6 +44,12 @@ func (this HTMLContext) Write(color Color, text string) string {
 }
 func (this HTMLContext) Writef(color Color, format string, a ...interface{}) string {
 	return this.Write(color, fmt.Sprintf(format, a...))
+}
+func (this HTMLContext) Print(color Color, text string) (int, error) {
+	return fmt.Print(this.Write(color, text))
+}
+func (this HTMLContext) Printf(color Color, format string, a ...interface{}) (int, error) {
+	return fmt.Print(this.Writef(color, format, a...))
 }
 
 type NoColorContext struct{}

@@ -7,6 +7,16 @@ import (
 	"github.com/miekg/dns"
 )
 
+const (
+	Kind_A     = "A"
+	Kind_AAAA  = "AAAA"
+	Kind_NS    = "NS"
+	Kind_TXT   = "TXT"
+	Kind_CNAME = "CNAME"
+	Kind_MX    = "MX"
+	Kind_SRV   = "SRV"
+)
+
 type DNS_Address struct {
 	TTL     uint32 `json:"ttl"`
 	Enabled bool   `json:"enabled"`
@@ -192,6 +202,13 @@ func (this *DNS_IP_Record) ToAAAAList(name string) []dns.RR {
 	}
 	return result
 }
+func (this *DNS_IP_Record) GetAddresses() []DNS_IP_Address {
+	if this == nil {
+		return []DNS_IP_Address{}
+	} else {
+		return this.Addresses
+	}
+}
 
 type DNS_STRING_Record struct {
 	Weighted  bool                 `json:"wighted"`
@@ -279,6 +296,13 @@ func (this *DNS_STRING_Record) ToTXTList(name string) []dns.RR {
 		},
 	}
 }
+func (this *DNS_STRING_Record) GetAddresses() []DNS_STRING_Address {
+	if this == nil {
+		return []DNS_STRING_Address{}
+	} else {
+		return this.Addresses
+	}
+}
 
 type DNS_MX_Record struct {
 	Weighted  bool             `json:"wighted"`
@@ -344,6 +368,13 @@ func (this *DNS_MX_Record) ToMXList(name string) []dns.RR {
 	}
 	return result
 }
+func (this *DNS_MX_Record) GetAddresses() []DNS_MX_Address {
+	if this == nil {
+		return []DNS_MX_Address{}
+	} else {
+		return this.Addresses
+	}
+}
 
 type DNS_SRV_Record struct {
 	Addresses []DNS_SRV_Address `json:"addresses,omitempty"`
@@ -378,6 +409,13 @@ func (this *DNS_SRV_Record) ToSRVList(name string) []dns.RR {
 	}
 	return result
 }
+func (this *DNS_SRV_Record) GetAddresses() []DNS_SRV_Address {
+	if this == nil {
+		return []DNS_SRV_Address{}
+	} else {
+		return this.Addresses
+	}
+}
 
 type DNSRecord struct {
 	// Domain of this record
@@ -397,4 +435,36 @@ type DNSRecord struct {
 	SRVRecords *DNS_SRV_Record `json:"srv,omitempty"`
 	// If this is a TXT record, then this is TXT record's information
 	TXTRecords *DNS_STRING_Record `json:"txt,omitempty"`
+}
+
+type DNSAddressPtr struct {
+	Kind string
+	Ptr  *DNS_Address
+}
+
+// GetAddresses get list of all addresses in a `DNSRecord`
+func (this *DNSRecord) GetAddresses() []DNSAddressPtr {
+	var result []DNSAddressPtr
+	for _, addr := range this.ARecords.GetAddresses() {
+		result = append(result, DNSAddressPtr{Kind: Kind_A, Ptr: &addr.DNS_Address})
+	}
+	for _, addr := range this.AAAARecords.GetAddresses() {
+		result = append(result, DNSAddressPtr{Kind: Kind_AAAA, Ptr: &addr.DNS_Address})
+	}
+	for _, addr := range this.NSRecords.GetAddresses() {
+		result = append(result, DNSAddressPtr{Kind: Kind_NS, Ptr: &addr.DNS_Address})
+	}
+	for _, addr := range this.TXTRecords.GetAddresses() {
+		result = append(result, DNSAddressPtr{Kind: Kind_TXT, Ptr: &addr.DNS_Address})
+	}
+	for _, addr := range this.CNameRecords.GetAddresses() {
+		result = append(result, DNSAddressPtr{Kind: Kind_CNAME, Ptr: &addr.DNS_Address})
+	}
+	for _, addr := range this.MXRecords.GetAddresses() {
+		result = append(result, DNSAddressPtr{Kind: Kind_MX, Ptr: &addr.DNS_Address})
+	}
+	for _, addr := range this.SRVRecords.GetAddresses() {
+		result = append(result, DNSAddressPtr{Kind: Kind_SRV, Ptr: &addr.DNS_Address})
+	}
+	return result
 }
