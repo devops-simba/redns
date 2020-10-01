@@ -6,9 +6,8 @@ import (
 
 type ListCommand struct{}
 type addressPtrWithRecord struct {
-	Kind string
-	Addr definitions.IDNSAddress
-	Rec  *definitions.DNSRecord
+	definitions.DNSAddressPtr
+	Rec *DNSRecordWithKey
 }
 
 func (this ListCommand) Normalize(context DisplayContext, args *CommandArgs) error {
@@ -38,36 +37,33 @@ func (this ListCommand) Execute(context DisplayContext, args CommandArgs) error 
 				continue
 			}
 			dnsAddress := addressPtr.Addr.BaseAddress()
-			if args.TTL != InvalidWord && dnsAddress.TTL != args.TTL {
+			if args.TTL != InvalidDWord && dnsAddress.TTL != uint32(args.TTL) {
 				continue
 			}
-			if args.Enabled != None && dnsAddress.Enabled != args.Enabled {
+			if args.Enabled != None && dnsAddress.Enabled != args.Enabled.Bool(true) {
 				continue
 			}
-			if args.Healthy != None && dnsAddress.Healthy != args.Healthy {
+			if args.Healthy != None && dnsAddress.Healthy != args.Healthy.Bool(true) {
 				continue
 			}
-			if args.Weight != InvalidWord && dnsAddress.Weight != args.Weight {
+			if args.Weight != InvalidWord && dnsAddress.Weight != uint16(args.Weight) {
 				continue
 			}
-			switch addressPtr.Kind {
-			case definitions.Kind_A, definitions.Kind_AAAA, definitions.Kind_NS, definitions.Kind_TXT, definitions.Kind_CNAME:
-				if args.Priority != InvalidWord {
-					continue
-				}
-			case definitions.Kind_MX:
-				if args.Priority != InvalidWord {
+			if args.Priority != InvalidWord {
+				switch addressPtr.Kind {
+				case definitions.Kind_MX:
 					mxAddr, _ := addressPtr.Addr.(definitions.DNS_MX_Address)
 					if mxAddr.Priority != mxAddr.Priority {
 						continue
 					}
-				}
-			case definitions.Kind_SRV:
-				if args.Priority != InvalidWord {
+				case definitions.Kind_SRV:
 					srvAddr, _ := addressPtr.Addr.(definitions.DNS_SRV_Address)
 					if srvAddr.Priority != srvAddr.Priority {
 						continue
 					}
+				default:
+					// rest of the kinds does not support priority
+					continue
 				}
 			}
 			if len(args.Value) != 0 && !args.Value.Contains(addressPtr.Addr.GetValue()) {
@@ -75,11 +71,23 @@ func (this ListCommand) Execute(context DisplayContext, args CommandArgs) error 
 			}
 
 			addresses = append(addresses, addressPtrWithRecord{
-				Kind: addressPtr.Kind,
-				Addr: addressPtr.Addr,
-				Rec:  rec,
+				DNSAddressPtr: addressPtr,
+				Rec:           &rec,
 			})
 		}
+	}
+
+	// now display this addresses
+	var last_rec *DNSRecordWithKey
+	for _, addr := range addresses {
+		if addr.Rec != last_rec {
+			last_rec = addr.Rec
+			context.Printf("%s(%s):\n", last_rec.Key, last_rec.Domain)
+		}
+
+		// not print the address
+		context.Printf("  - ")
+		context.PrintAddress(addr.DNSAddressPtr, 4)
 	}
 
 	return nil
