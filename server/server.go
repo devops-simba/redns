@@ -208,7 +208,7 @@ func SOA(name string, record *definitions.DNSRecord, serialNumber uint32) []dns.
 	mbox := ""
 	validMailAddresses := record.MXRecords.FindValidAddresses()
 	if !validMailAddresses.IsEmpty() {
-		mbox = validMailAddresses.Addresses[0].Server
+		mbox = validMailAddresses.Addresses[0].Value
 	}
 
 	return []dns.RR{
