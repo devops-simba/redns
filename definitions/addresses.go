@@ -172,7 +172,7 @@ func (this *DNS_SRV_Address) GetKind() string           { return Kind_SRV }
 func (this *DNS_SRV_Address) GetPriority() uint16       { return this.Priority }
 func (this *DNS_SRV_Address) BaseAddress() *DNS_Address { return &this.DNS_Address }
 func (this *DNS_SRV_Address) GetValue() string {
-	return this.Value + ":" + strconv.FormatUint(this.Port, 10)
+	return this.Value + ":" + strconv.Itoa(int(this.Port))
 }
 func (this *DNS_SRV_Address) ToRR(name string) dns.RR {
 	return &dns.SRV{
