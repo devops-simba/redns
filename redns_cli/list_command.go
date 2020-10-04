@@ -1,13 +1,15 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/devops-simba/redns/definitions"
 )
 
 type ListCommand struct{}
-type addressPtrWithRecord struct {
-	definitions.DNSAddressPtr
-	Rec *DNSRecordWithKey
+type DNSAddressWithRecord struct {
+	Addr definitions.IDNSAddress
+	Rec  *DNSRecordWithKey
 }
 
 func (this ListCommand) Normalize(context DisplayContext, args *CommandArgs) error {
@@ -15,10 +17,10 @@ func (this ListCommand) Normalize(context DisplayContext, args *CommandArgs) err
 		args.Domain = []string{AnyDomain}
 	}
 	if len(args.Name) == 0 {
-		args.Name = []string{AnyDomain}
+		args.Name = []string{AnyName}
 	}
 	if len(args.Kind) == 0 {
-		args.Kind = []string{AnyKind}
+		args.Kind = Kind{AnyKind}
 	}
 
 	return nil
@@ -30,49 +32,36 @@ func (this ListCommand) Execute(context DisplayContext, args CommandArgs) error 
 		return err
 	}
 
-	var addresses []addressPtrWithRecord
-	for _, rec := range records {
-		for _, addressPtr := range rec.GetAddresses() {
-			if !args.Kind.Contains(addressPtr.Kind) {
+	var addresses []DNSAddressWithRecord
+	for i := 0; i < len(records); i++ {
+		rec := &records[i]
+		for _, address := range rec.GetAddresses() {
+			if !args.Kind.Contains(address.GetKind()) {
 				continue
 			}
-			dnsAddress := addressPtr.Addr.BaseAddress()
+			dnsAddress := address.BaseAddress()
 			if args.TTL != InvalidDWord && dnsAddress.TTL != uint32(args.TTL) {
 				continue
 			}
-			if args.Enabled != None && dnsAddress.Enabled != args.Enabled.Bool(true) {
+			if args.Enabled != None && dnsAddress.Enabled != args.Enabled.Bool() {
 				continue
 			}
-			if args.Healthy != None && dnsAddress.Healthy != args.Healthy.Bool(true) {
+			if args.Healthy != None && dnsAddress.Healthy != args.Healthy.Bool() {
 				continue
 			}
 			if args.Weight != InvalidWord && dnsAddress.Weight != uint16(args.Weight) {
 				continue
 			}
-			if args.Priority != InvalidWord {
-				switch addressPtr.Kind {
-				case definitions.Kind_MX:
-					mxAddr, _ := addressPtr.Addr.(definitions.DNS_MX_Address)
-					if mxAddr.Priority != mxAddr.Priority {
-						continue
-					}
-				case definitions.Kind_SRV:
-					srvAddr, _ := addressPtr.Addr.(definitions.DNS_SRV_Address)
-					if srvAddr.Priority != srvAddr.Priority {
-						continue
-					}
-				default:
-					// rest of the kinds does not support priority
-					continue
-				}
+			if args.Priority != InvalidWord && address.GetPriority() != uint16(args.Priority) {
+				continue
 			}
-			if len(args.Value) != 0 && !args.Value.Contains(addressPtr.Addr.GetValue()) {
+			if len(args.Value) != 0 && !args.Value.Contains(address.GetValue()) {
 				continue
 			}
 
-			addresses = append(addresses, addressPtrWithRecord{
-				DNSAddressPtr: addressPtr,
-				Rec:           &rec,
+			addresses = append(addresses, DNSAddressWithRecord{
+				Addr: address,
+				Rec:  rec,
 			})
 		}
 	}
@@ -80,14 +69,19 @@ func (this ListCommand) Execute(context DisplayContext, args CommandArgs) error 
 	// now display this addresses
 	var last_rec *DNSRecordWithKey
 	for _, addr := range addresses {
+		// if this is a new record, print its header
 		if addr.Rec != last_rec {
 			last_rec = addr.Rec
-			context.Printf("%s(%s):\n", last_rec.Key, last_rec.Domain)
+			key := last_rec.Key
+			if strings.HasPrefix(key, "$.") {
+				key = "*." + key[2:]
+			}
+			context.Printf("%s(%s):\n", key, last_rec.Domain)
 		}
 
-		// not print the address
+		// now print the address
 		context.Printf("  - ")
-		context.PrintAddress(addr.DNSAddressPtr, 4)
+		context.PrintAddress(addr.Addr, 4)
 	}
 
 	return nil

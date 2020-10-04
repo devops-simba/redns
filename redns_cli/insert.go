@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"net"
 	"strings"
 
 	"github.com/devops-simba/redns/definitions"
@@ -71,8 +70,8 @@ func (this InsertCommand) normalizeKind(context DisplayContext, args *CommandArg
 	}
 	if len(args.Kind) != len(args.Value) {
 		kind := args.Kind[0]
-		args.Kind = make(Kind, len(args.Name))
-		for i := 0; i < len(args.Name); i++ {
+		args.Kind = make(Kind, len(args.Value))
+		for i := 0; i < len(args.Value); i++ {
 			args.Kind[i] = kind
 		}
 	}
@@ -86,7 +85,6 @@ func (this InsertCommand) normalizeValue(context DisplayContext, args *CommandAr
 	for i := 0; i < len(args.Value); i++ {
 		kind := args.Kind[i]
 		value := args.Value[i]
-		var ip net.IP
 		switch kind {
 		case definitions.Kind_A:
 			if !IsIPv4(value) {
@@ -172,64 +170,33 @@ func (this InsertCommand) Execute(context DisplayContext, args CommandArgs) erro
 		if err != nil {
 			return err
 		}
-		rec = prec.DNSRecord
+		if prec != nil {
+			rec = prec.DNSRecord
+		} else {
+			rec.Domain = args.Domain[0]
+		}
 	} else {
 		rec.Domain = args.Domain[0]
 	}
 
 	for i, kind := range args.Kind {
-		found := false
 		value := args.Value[i]
-		var addr *definitions.DNS_Address
-		var ipAddr *definitions.DNS_IP_Address
-		var strAddr *definitions.DNS_STRING_Address
-		var mxAddr *definitions.DNS_MX_Address
-		var srvAddr *definitions.DNS_SRV_Address
 		switch kind {
 		case definitions.Kind_A:
-			ipAddr, _ = AddIPAddress(&rec.ARecords, value)
-			addr = &ipAddr.DNS_Address
+			rec.ARecords, _, _ = args.AddRecord_A(rec.ARecords, value)
 		case definitions.Kind_AAAA:
-			AddIPAddress(&rec.AAAARecords, value)
-			addr = &ipAddr.DNS_Address
+			rec.AAAARecords, _, _ = args.AddRecord_AAAA(rec.AAAARecords, value)
 		case definitions.Kind_NS:
-			strAddr, _ = AddSTRAddress(&rec.NSRecords, value, false)
-			addr = &strAddr.DNS_Address
+			rec.NSRecords, _, _ = args.AddRecord_NS(rec.NSRecords, value)
 		case definitions.Kind_TXT:
-			strAddr, _ = AddSTRAddress(&rec.TXTRecords, value, true)
-			addr = &strAddr.DNS_Address
+			rec.TXTRecords, _, _ = args.AddRecord_TXT(rec.TXTRecords, value)
 		case definitions.Kind_CNAME:
-			strAddr, _ = AddSTRAddress(&rec.CNameRecords, value, false)
-			addr = &strAddr.DNS_Address
+			rec.CNameRecords, _, _ = args.AddRecord_CNAME(rec.CNameRecords, value)
 		case definitions.Kind_MX:
-			mxAddr, _ = AddMXAddress(&rec.MXRecords, value)
-			if args.Priority != InvalidWord {
-				mxAddr.Priority = uint16(args.Priority)
-			}
-			addr = &mxAddr.DNS_Address
+			rec.MXRecords, _, _ = args.AddRecord_MX(rec.MXRecords, value)
 		case definitions.Kind_SRV:
-			srv, port, err := ParseSRV(value)
-			if err != nil {
-				return err
-			}
-			srvAddr, _ = AddSRVAddress(&rec.SRVRecords, srv, uint16(port))
-			if args.Priority != InvalidWord {
-				srvAddr.Priority = uint16(args.Priority)
-			}
-			addr = &srvAddr.DNS_Address
-		}
-
-		if args.Enabled != None {
-			addr.Enabled = args.Enabled.Bool(true)
-		}
-		if args.Healthy != None {
-			addr.Healthy = args.Healthy.Bool(true)
-		}
-		if args.Weight != InvalidWord {
-			addr.Weight = uint16(args.Weight)
-		}
-		if args.TTL != InvalidDWord {
-			addr.TTL = uint32(args.TTL)
+			server, port, _ := ParseSRV(value) // its already validated so it should never fail
+			rec.SRVRecords, _, _ = args.AddRecord_SRV(rec.SRVRecords, server, port)
 		}
 	}
 

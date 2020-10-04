@@ -14,6 +14,7 @@ func main() {
 		fmt.Println("	list    List records and addresses based on enetered criteria")
 		fmt.Println("	add     Add one or more addresses to a record")
 		fmt.Println("	set     Replace content of a record with addresses that specified in this command")
+		fmt.Println("	remove  Remove addresses or records")
 		flag.PrintDefaults()
 	}
 
@@ -31,15 +32,32 @@ func main() {
 		command = AddCommand
 	case "set":
 		command = SetCommand
+	case "remove":
+		command = RemoveCommand{}
+	default:
+		flag.Parse()
+		log.Error("Unknown command.")
+		os.Exit(2)
 	}
 
 	args := NewCommandArgs()
-	flagset := flag.NewFlagSet("CommandArgs", flag.ExitOnError)
-	args.BindFlags(flagset)
-	err := flagset.Parse(os.Args[2:])
+	args.BindFlags(flag.CommandLine)
+	err := flag.CommandLine.Parse(os.Args[2:])
 	if err != nil {
 		log.Errorf("Failed to parse the arguments: %v", err)
 		os.Exit(2)
 	}
 
+	context := NewDisplayContext(nil, nil)
+	err = command.Normalize(context, &args)
+	if err != nil {
+		log.Errorf("Invalid command argument: %v", err)
+		os.Exit(2)
+	}
+
+	err = command.Execute(context, args)
+	if err != nil {
+		log.Errorf("Error in executing the command: %v", err)
+		os.Exit(1)
+	}
 }

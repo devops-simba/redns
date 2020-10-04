@@ -36,7 +36,7 @@ func NewCommandArgs() CommandArgs {
 	}
 }
 
-func (this CommandArgs) BindFlags(flagset *flag.FlagSet) {
+func (this *CommandArgs) BindFlags(flagset *flag.FlagSet) {
 	if flagset == nil {
 		flagset = flag.CommandLine
 	}
@@ -60,7 +60,7 @@ func (this CommandArgs) BindFlags(flagset *flag.FlagSet) {
 func (this CommandArgs) ReadRecordByKey(key string) (*definitions.DNSRecord, error) {
 	value, err := this.Redis.Get(key)
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 
 	var rec definitions.DNSRecord
@@ -79,6 +79,9 @@ func (this CommandArgs) ReadRecord(domain string, name string) (*DNSRecordWithKe
 	rec, err := this.ReadRecordByKey(key)
 	if err != nil {
 		return nil, err
+	}
+	if rec == nil {
+		return nil, nil
 	}
 
 	if rec.Domain != domain {
@@ -151,7 +154,6 @@ func (this CommandArgs) GetRecordKeyAndSelector() (
 	return keyPattern, keySelector, domainSelector
 }
 
-// FindRecords find all the records that match the input domain and name
 func (this CommandArgs) FindRecords(context DisplayContext) ([]DNSRecordWithKey, error) {
 	if len(this.Domain) == 0 || len(this.Name) == 0 {
 		return nil, InvalidArgs{}
@@ -178,6 +180,10 @@ func (this CommandArgs) FindRecords(context DisplayContext) ([]DNSRecordWithKey,
 		}
 	} else {
 		keys = []string{pattern}
+	}
+
+	if len(keys) == 0 {
+		return nil, nil
 	}
 
 	// now read data of those keys
@@ -213,4 +219,384 @@ func (this CommandArgs) FindRecords(context DisplayContext) ([]DNSRecordWithKey,
 	}
 
 	return records, nil
+}
+
+func (this CommandArgs) NewDnsAddress() definitions.DNS_Address {
+	return this.UpdatedDnsAddress(&baseDnsAddress)
+}
+func (this CommandArgs) UpdatedDnsAddress(src *definitions.DNS_Address) definitions.DNS_Address {
+	return definitions.DNS_Address{
+		TTL:     this.TTL.ValueOr(src.TTL),
+		Weight:  this.Weight.ValueOr(src.Weight),
+		Enabled: this.Enabled.BoolOr(src.Enabled),
+		Healthy: this.Enabled.BoolOr(src.Healthy),
+	}
+}
+
+func (this CommandArgs) NewIPAddress(value string) definitions.DNS_IP_Address {
+	return definitions.DNS_IP_Address{
+		DNS_Address: this.NewDnsAddress(),
+		IP:          value,
+	}
+}
+
+func (this CommandArgs) NewSTRAddress(value string) definitions.DNS_STR_Address {
+	return definitions.DNS_STR_Address{
+		DNS_Address: this.NewDnsAddress(),
+		Value:       value,
+	}
+}
+
+func (this CommandArgs) AddRecord_A(rec *definitions.DNS_A_Record, value string) (
+	*definitions.DNS_A_Record, *definitions.DNS_A_Address, bool) {
+	var result *definitions.DNS_A_Record
+	if rec == nil {
+		result = &definitions.DNS_A_Record{
+			Addresses: []definitions.DNS_A_Address{
+				definitions.DNS_A_Address{
+					DNS_IP_Address: this.NewIPAddress(value),
+				},
+			},
+		}
+		return result, &result.Addresses[0], true
+	} else {
+		// search for this IP
+		result = &definitions.DNS_A_Record{
+			Weighted:  rec.Weighted,
+			Addresses: append([]definitions.DNS_A_Address{}, rec.Addresses...),
+		}
+
+		for i := 0; i < len(rec.Addresses); i++ {
+			if rec.Addresses[i].IP == value {
+				// already exists
+				result.Addresses[i].DNS_Address = this.UpdatedDnsAddress(&result.Addresses[i].DNS_Address)
+				return result, &result.Addresses[i], false
+			}
+		}
+
+		result.Addresses = append(result.Addresses, definitions.DNS_A_Address{
+			DNS_IP_Address: this.NewIPAddress(value),
+		})
+
+		return result, &result.Addresses[len(result.Addresses)-1], true
+	}
+}
+func RemoveRecord_A(rec *definitions.DNS_A_Record, index int) *definitions.DNS_A_Record {
+	if index < 0 || index >= rec.Length() {
+		panic("Invalid index")
+	}
+	if rec.Length() == 1 {
+		if rec.Weighted {
+			return &definitions.DNS_A_Record{
+				Weighted: true,
+			}
+		} else {
+			return nil
+		}
+	}
+
+	addresses := make([]definitions.DNS_A_Address, 0, rec.Length()-1)
+	addresses = append(addresses, rec.Addresses[:index]...)
+	addresses = append(addresses, rec.Addresses[index+1:]...)
+	return &definitions.DNS_A_Record{Weighted: rec.Weighted, Addresses: addresses}
+}
+
+func (this CommandArgs) AddRecord_AAAA(rec *definitions.DNS_AAAA_Record, value string) (
+	*definitions.DNS_AAAA_Record, *definitions.DNS_AAAA_Address, bool) {
+	var result *definitions.DNS_AAAA_Record
+	if rec == nil {
+		result = &definitions.DNS_AAAA_Record{
+			Addresses: []definitions.DNS_AAAA_Address{
+				definitions.DNS_AAAA_Address{
+					DNS_IP_Address: this.NewIPAddress(value),
+				},
+			},
+		}
+		return result, &result.Addresses[0], true
+	} else {
+		// search for this IP
+		result = &definitions.DNS_AAAA_Record{
+			Weighted:  rec.Weighted,
+			Addresses: append([]definitions.DNS_AAAA_Address{}, rec.Addresses...),
+		}
+		for i := 0; i < len(rec.Addresses); i++ {
+			if rec.Addresses[i].IP == value {
+				// already exists
+				result.Addresses[i].DNS_Address = this.UpdatedDnsAddress(&rec.Addresses[i].DNS_Address)
+				return result, &result.Addresses[i], false
+			}
+		}
+
+		result.Addresses = append(result.Addresses, definitions.DNS_AAAA_Address{
+			DNS_IP_Address: this.NewIPAddress(value),
+		})
+		return result, &result.Addresses[len(result.Addresses)-1], true
+	}
+}
+func RemoveRecord_AAAA(rec *definitions.DNS_AAAA_Record, index int) *definitions.DNS_AAAA_Record {
+	if index < 0 || index >= rec.Length() {
+		panic("Invalid index")
+	}
+	if rec.Length() == 1 {
+		if rec.Weighted {
+			return &definitions.DNS_AAAA_Record{
+				Weighted: true,
+			}
+		} else {
+			return nil
+		}
+	}
+
+	addresses := make([]definitions.DNS_AAAA_Address, 0, rec.Length()-1)
+	addresses = append(addresses, rec.Addresses[:index]...)
+	addresses = append(addresses, rec.Addresses[index+1:]...)
+	return &definitions.DNS_AAAA_Record{Weighted: rec.Weighted, Addresses: addresses}
+}
+
+func (this CommandArgs) AddRecord_NS(rec *definitions.DNS_NS_Record, value string) (
+	*definitions.DNS_NS_Record, *definitions.DNS_NS_Address, bool) {
+	var result *definitions.DNS_NS_Record
+	if rec == nil {
+		result = &definitions.DNS_NS_Record{
+			Addresses: []definitions.DNS_NS_Address{
+				definitions.DNS_NS_Address{
+					DNS_STR_Address: this.NewSTRAddress(value),
+				},
+			},
+		}
+		return result, &result.Addresses[0], true
+	} else {
+		// search for this IP
+		result = &definitions.DNS_NS_Record{
+			Weighted:  rec.Weighted,
+			Addresses: append([]definitions.DNS_NS_Address{}, rec.Addresses...),
+		}
+		for i := 0; i < len(rec.Addresses); i++ {
+			if rec.Addresses[i].Value == value {
+				// already exists
+				result.Addresses[i].DNS_Address = this.UpdatedDnsAddress(&result.Addresses[i].DNS_Address)
+				return result, &result.Addresses[i], false
+			}
+		}
+
+		result.Addresses = append(result.Addresses, definitions.DNS_NS_Address{
+			DNS_STR_Address: this.NewSTRAddress(value),
+		})
+		return result, &result.Addresses[len(result.Addresses)-1], true
+	}
+}
+func RemoveRecord_NS(rec *definitions.DNS_NS_Record, index int) *definitions.DNS_NS_Record {
+	if index < 0 || index >= rec.Length() {
+		panic("Invalid index")
+	}
+	if rec.Length() == 1 {
+		if rec.Weighted {
+			return &definitions.DNS_NS_Record{
+				Weighted: true,
+			}
+		} else {
+			return nil
+		}
+	}
+
+	addresses := make([]definitions.DNS_NS_Address, 0, rec.Length()-1)
+	addresses = append(addresses, rec.Addresses[:index]...)
+	addresses = append(addresses, rec.Addresses[index+1:]...)
+	return &definitions.DNS_NS_Record{Weighted: rec.Weighted, Addresses: addresses}
+}
+
+func (this CommandArgs) AddRecord_TXT(rec *definitions.DNS_TXT_Record, value string) (
+	*definitions.DNS_TXT_Record, *definitions.DNS_TXT_Address, bool) {
+	var result *definitions.DNS_TXT_Record
+	if rec == nil {
+		result = &definitions.DNS_TXT_Record{
+			Addresses: []definitions.DNS_TXT_Address{
+				definitions.DNS_TXT_Address{
+					DNS_STR_Address: this.NewSTRAddress(value),
+				},
+			},
+		}
+		return result, &result.Addresses[0], true
+	} else {
+		// search for this IP
+		result = &definitions.DNS_TXT_Record{
+			Weighted:  rec.Weighted,
+			Addresses: append([]definitions.DNS_TXT_Address{}, rec.Addresses...),
+		}
+		for i := 0; i < len(rec.Addresses); i++ {
+			if rec.Addresses[i].Value == value {
+				// already exists
+				result.Addresses[i].DNS_Address = this.UpdatedDnsAddress(&result.Addresses[i].DNS_Address)
+				return result, &result.Addresses[i], false
+			}
+		}
+
+		result.Addresses = append(result.Addresses, definitions.DNS_TXT_Address{
+			DNS_STR_Address: this.NewSTRAddress(value),
+		})
+		return result, &result.Addresses[len(result.Addresses)-1], true
+	}
+}
+func RemoveRecord_TXT(rec *definitions.DNS_TXT_Record, index int) *definitions.DNS_TXT_Record {
+	if index < 0 || index >= rec.Length() {
+		panic("Invalid index")
+	}
+	if rec.Length() == 1 {
+		if rec.Weighted {
+			return &definitions.DNS_TXT_Record{
+				Weighted: true,
+			}
+		} else {
+			return nil
+		}
+	}
+
+	addresses := make([]definitions.DNS_TXT_Address, 0, rec.Length()-1)
+	addresses = append(addresses, rec.Addresses[:index]...)
+	addresses = append(addresses, rec.Addresses[index+1:]...)
+	return &definitions.DNS_TXT_Record{Weighted: rec.Weighted, Addresses: addresses}
+}
+
+func (this CommandArgs) AddRecord_CNAME(rec *definitions.DNS_CNAME_Record, value string) (
+	*definitions.DNS_CNAME_Record, *definitions.DNS_CNAME_Address, bool) {
+	var result *definitions.DNS_CNAME_Record
+	if rec == nil {
+		result = &definitions.DNS_CNAME_Record{
+			Addresses: []definitions.DNS_CNAME_Address{
+				definitions.DNS_CNAME_Address{
+					DNS_STR_Address: this.NewSTRAddress(value),
+				},
+			},
+		}
+		return result, &result.Addresses[0], true
+	} else {
+		// search for this IP
+		result = &definitions.DNS_CNAME_Record{
+			Weighted:  rec.Weighted,
+			Addresses: append([]definitions.DNS_CNAME_Address{}, rec.Addresses...),
+		}
+		for i := 0; i < len(rec.Addresses); i++ {
+			if rec.Addresses[i].Value == value {
+				// already exists
+				result.Addresses[i].DNS_Address = this.UpdatedDnsAddress(&result.Addresses[i].DNS_Address)
+				return result, &result.Addresses[i], false
+			}
+		}
+
+		result.Addresses = append(result.Addresses, definitions.DNS_CNAME_Address{
+			DNS_STR_Address: this.NewSTRAddress(value),
+		})
+		return result, &result.Addresses[len(result.Addresses)-1], true
+	}
+}
+func RemoveRecord_CNAME(rec *definitions.DNS_CNAME_Record, index int) *definitions.DNS_CNAME_Record {
+	if index < 0 || index >= rec.Length() {
+		panic("Invalid index")
+	}
+	if rec.Length() == 1 {
+		if rec.Weighted {
+			return &definitions.DNS_CNAME_Record{
+				Weighted: true,
+			}
+		} else {
+			return nil
+		}
+	}
+
+	addresses := make([]definitions.DNS_CNAME_Address, 0, rec.Length()-1)
+	addresses = append(addresses, rec.Addresses[:index]...)
+	addresses = append(addresses, rec.Addresses[index+1:]...)
+	return &definitions.DNS_CNAME_Record{Weighted: rec.Weighted, Addresses: addresses}
+}
+
+func (this CommandArgs) AddRecord_MX(rec *definitions.DNS_MX_Record, value string) (
+	*definitions.DNS_MX_Record, *definitions.DNS_MX_Address, bool) {
+	var result *definitions.DNS_MX_Record
+	if rec == nil {
+		result = &definitions.DNS_MX_Record{
+			Addresses: []definitions.DNS_MX_Address{
+				definitions.DNS_MX_Address{
+					DNS_Address: this.NewDnsAddress(),
+					Value:       value,
+					Priority:    this.Priority.ValueOr(1),
+				},
+			},
+		}
+		return result, &result.Addresses[0], true
+	} else {
+		// search for this IP
+		result = &definitions.DNS_MX_Record{
+			Weighted:  rec.Weighted,
+			Addresses: append([]definitions.DNS_MX_Address{}, rec.Addresses...),
+		}
+		for i := 0; i < len(rec.Addresses); i++ {
+			if rec.Addresses[i].Value == value {
+				// already exists
+				result.Addresses[i].DNS_Address = this.UpdatedDnsAddress(&result.Addresses[i].DNS_Address)
+				result.Addresses[i].Priority = this.Priority.ValueOr(result.Addresses[i].Priority)
+				return result, &result.Addresses[i], false
+			}
+		}
+
+		result.Addresses = append(result.Addresses, definitions.DNS_MX_Address{
+			DNS_Address: this.NewDnsAddress(),
+			Value:       value,
+			Priority:    this.Priority.ValueOr(1),
+		})
+		return result, &result.Addresses[len(result.Addresses)-1], true
+	}
+}
+func RemoveRecord_MX(rec *definitions.DNS_MX_Record, index int) *definitions.DNS_MX_Record {
+	if index < 0 || index >= rec.Length() {
+		panic("Invalid index")
+	}
+	if rec.Length() == 1 {
+		if rec.Weighted {
+			return &definitions.DNS_MX_Record{
+				Weighted: true,
+			}
+		} else {
+			return nil
+		}
+	}
+
+	addresses := make([]definitions.DNS_MX_Address, 0, rec.Length()-1)
+	addresses = append(addresses, rec.Addresses[:index]...)
+	addresses = append(addresses, rec.Addresses[index+1:]...)
+	return &definitions.DNS_MX_Record{Weighted: rec.Weighted, Addresses: addresses}
+}
+
+func (this CommandArgs) AddRecord_SRV(rec definitions.DNS_SRV_Record, server string, port uint16) (
+	definitions.DNS_SRV_Record, *definitions.DNS_SRV_Address, bool) {
+	result := make(definitions.DNS_SRV_Record, 0, rec.Length()+1)
+	result = append(result, rec...)
+	for i := 0; i < rec.Length(); i++ {
+		if rec[i].Value == server && rec[i].Port == port {
+			// already exists
+			result[i].DNS_Address = this.UpdatedDnsAddress(&result[i].DNS_Address) // override possibly changed address
+			result[i].Priority = this.Priority.ValueOr(result[i].Priority)
+			return result, &result[i], false
+		}
+	}
+
+	result = append(result, definitions.DNS_SRV_Address{
+		DNS_Address: this.NewDnsAddress(),
+		Value:       server,
+		Port:        port,
+	})
+	return result, &result[len(result)-1], true
+}
+func RemoveRecord_SRV(rec definitions.DNS_SRV_Record, index int) definitions.DNS_SRV_Record {
+	if index < 0 || index >= rec.Length() {
+		panic("Invalid index")
+	}
+
+	if rec.Length() == 1 {
+		return nil
+	}
+
+	result := make(definitions.DNS_SRV_Record, 0, rec.Length()-1)
+	result = append(result, rec[:index]...)
+	result = append(result, rec[index+1:]...)
+	return result
 }

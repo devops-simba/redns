@@ -32,8 +32,8 @@ type DisplayContext interface {
 	Printf(format string, a ...interface{})
 
 	PrintRecord(rec *definitions.DNSRecord, indent int)
-	PrintAddressRecord(kind string, rec interface{}, indent int)
-	PrintAddress(addr definitions.DNSAddressPtr, indent int)
+	PrintAddressRecord(rec definitions.IDNSAddressRecord, indent int)
+	PrintAddress(addr definitions.IDNSAddress, indent int)
 }
 
 type ColorPallette map[string]definitions.Color
@@ -75,7 +75,7 @@ type DefaultDisplayContext struct {
 
 func NewDisplayContext(pallette ColorPallette, colorContext definitions.ColorContext) DisplayContext {
 	if pallette == nil {
-		pallette := ColorPallette{
+		pallette = ColorPallette{
 			"bad":     color_BAD,
 			"error":   color_ERR,
 			"ok":      color_OK,
@@ -104,8 +104,8 @@ func (this DefaultDisplayContext) Errorf(format string, a ...interface{}) { log.
 func (this DefaultDisplayContext) Print(msg string)                       { fmt.Print(msg) }
 func (this DefaultDisplayContext) Printf(format string, a ...interface{}) { fmt.Printf(format, a...) }
 
-func (this DefaultDisplayContext) PrintAddress(addr definitions.DNSAddressPtr, indent int) {
-	baseAddr := addr.Addr.BaseAddress()
+func (this DefaultDisplayContext) PrintAddress(addr definitions.IDNSAddress, indent int) {
+	baseAddr := addr.BaseAddress()
 
 	okColor := this.Pallette.GetOr("ok", color_OK, "success")
 	badColor := this.Pallette.GetOr("bad", color_BAD, "error")
@@ -125,84 +125,57 @@ func (this DefaultDisplayContext) PrintAddress(addr definitions.DNSAddressPtr, i
 	}
 
 	priority := ""
-	if addr.Kind == definitions.Kind_MX {
-		mxAddr, _ := addr.Addr.(definitions.DNS_MX_Address)
-		priority = strconv.Itoa(int(mxAddr.Priority))
-	} else if addr.Kind == definitions.Kind_SRV {
-		srvAddr, _ := addr.Addr.(definitions.DNS_SRV_Address)
-		priority = strconv.Itoa(int(srvAddr.Priority))
+	nPriority := addr.GetPriority()
+	if nPriority != definitions.PriorityIsNotSupported {
+		priority = "PRI:" + strconv.Itoa(int(nPriority))
 	}
 
-	this.Printf("%s%s%s %20s E:%s H:%s W:%d TTL:%d PRI:%s\n",
+	value := addr.GetValue()
+	if len(value) < 30 {
+		value += strings.Repeat(" ", 30-len(value))
+	}
+
+	kind := addr.GetKind()
+	this.Printf("%s%s%s %s E:%s H:%s W:%d TTL:%d%s\n",
 		strings.Repeat(" ", indent),
-		addr.Kind,
-		strings.Repeat(" ", 5-len(addr.Kind)),
-		addr.Addr.GetValue(),
+		kind,
+		strings.Repeat(" ", 5-len(kind)),
+		value,
 		enabled,
 		healthy,
 		int(baseAddr.Weight),
 		baseAddr.TTL,
 		priority)
 }
-func (this DefaultDisplayContext) PrintAddressRecord(kind string, rec interface{}, indent int) {
-	this.Printf("%s%s%s ",
+func (this DefaultDisplayContext) PrintAddressRecord(rec definitions.IDNSAddressRecord, indent int) {
+	kind := rec.GetItemKind()
+	this.Printf("%s%s%s",
 		strings.Repeat(" ", indent),
 		kind,
 		strings.Repeat(" ", 5-len(kind)),
 	)
 
-	weighted := false
-	switch kind {
-	case definitions.Kind_A, definitions.Kind_AAAA:
-		rec, _ := rec.(*definitions.DNS_IP_Record)
-		if rec.Weighted {
-			this.Print("[LOAD BALANCED] ")
-		}
-		if len(rec.Addresses) == 0 {
-			this.Printf("(NO ADDRESSES)\n")
-			return
-		}
-		for _, addr := range rec.Addresses {
-			this.PrintAddress(definitions.DNSAddressPtr{Kind: kind, Addr: addr}, indent+2)
-		}
-	case definitions.Kind_NS, definitions.Kind_TXT, definitions.Kind_CNAME:
-		rec, _ := rec.(*definitions.DNS_STRING_Record)
-		if rec.Weighted {
-			this.Print("[LOAD BALANCED] ")
-		}
-		if len(rec.Addresses) == 0 {
-			this.Printf("(NO ADDRESSES)\n")
-			return
-		}
-		this.Print("\n")
-		for _, addr := range rec.Addresses {
-			this.PrintAddress(definitions.DNSAddressPtr{Kind: kind, Addr: addr}, indent+2)
-		}
-	case definitions.Kind_MX:
-		rec, _ := rec.(*definitions.DNS_MX_Record)
-		if rec.Weighted {
-			this.Print("[LOAD BALANCED] ")
-		}
-		if len(rec.Addresses) == 0 {
-			this.Printf("(NO ADDRESSES)\n")
-			return
-		}
-		this.Print("\n")
-		for _, addr := range rec.Addresses {
-			this.PrintAddress(definitions.DNSAddressPtr{Kind: kind, Addr: addr}, indent+2)
-		}
-	case definitions.Kind_SRV:
-		rec, _ := rec.(*definitions.DNS_SRV_Record)
-		if len(rec.Addresses) == 0 {
-			this.Printf("(NO ADDRESSES)\n")
-			return
-		}
-		this.Print("\n")
-		for _, addr := range rec.Addresses {
-			this.PrintAddress(definitions.DNSAddressPtr{Kind: kind, Addr: addr}, indent+2)
-		}
+	if rec.IsWeighted() {
+		this.Print(" [LOAD BALANCED]")
+	}
+
+	addresses := rec.AddressList()
+	if len(addresses) == 0 {
+		this.Print(" (EMPTY)\n")
+		return
+	}
+
+	this.Print("\n")
+	for i := 0; i < len(addresses); i++ {
+		this.PrintAddress(addresses[i], 0)
 	}
 }
 func (this DefaultDisplayContext) PrintRecord(rec *definitions.DNSRecord, indent int) {
-
+	sIndent := strings.Repeat(" ", indent)
+	this.Printf("%sDomain: %s\n", sIndent, rec.Domain)
+	addresses := rec.GetAddresses()
+	for i := 0; i < len(addresses); i++ {
+		this.Printf("%s- ", sIndent)
+		this.PrintAddress(addresses[i], 0)
+	}
 }

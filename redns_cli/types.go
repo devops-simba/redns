@@ -12,7 +12,7 @@ import (
 )
 
 type DomainName []string
-type SubdomainName = DomainName
+type SubdomainName []string
 type CommaSeparatedValue []string
 type Kind []string
 type Word uint16
@@ -23,6 +23,7 @@ const (
 	domainCharsWithWC       = "a-zA-Z0-9\\*\\?"
 	AnyKind                 = "*"
 	AnyDomain               = "*"
+	AnyName                 = "*"
 	InvalidWord       Word  = 0xFFFF
 	InvalidDWord      DWord = 0xFFFFFFFF
 	True              Bool3 = 0xFF
@@ -32,7 +33,7 @@ const (
 
 var (
 	domainPattern = regexp.MustCompile(
-		fmt.Sprintf("^(?:[%s](?:[%s-]{0,61}[%s])?\\.)+[%s][%s-]{0,61}[%s]$",
+		fmt.Sprintf("^(?:\\*|(?:[%s](?:[%s-]{0,61}[%s])?\\.)+[%s][%s-]{0,61}[%s])$",
 			domainCharsWithWC, domainCharsWithWC, domainCharsWithWC,
 			domainCharsWithWC, domainCharsWithWC, domainCharsWithWC))
 
@@ -111,8 +112,6 @@ func (this *RedisValue) Set(value string) error {
 		password, _ = u.User.Password()
 	}
 
-	clean := value[0 : len(value)-len(u.Path)][8:]
-
 	this.Addr = net.JoinHostPort(host, strconv.Itoa(port))
 	this.Password = password
 	this.Db = db
@@ -144,16 +143,16 @@ func (this *DomainName) Set(value string) error {
 //endregion
 
 //region SubdomainName
-func (this *DomainName) String() string { return strings.Join(*this, ",") }
-func (this *DomainName) Set(value string) error {
+func (this *SubdomainName) String() string { return strings.Join(*this, ",") }
+func (this *SubdomainName) Set(value string) error {
 	if len(value) == 0 {
 		*this = []string{}
 		return nil
 	} else {
 		*this = strings.Split(value, ",")
 		for i, item := range *this {
-			if !domainPattern.MatchString(item) {
-				return fmt.Errorf("'%s' is not a valid domain name", item)
+			if !subDomainPattern.MatchString(item) {
+				return fmt.Errorf("'%s' is not a valid subdomain name", item)
 			} else {
 				(*this)[i] = strings.ToLower(item)
 			}
@@ -242,9 +241,18 @@ func (this *Word) Set(value string) error {
 	return nil
 }
 
+func (this Word) Value() uint16 { return uint16(this) }
+func (this Word) ValueOr(defaultValue uint16) uint16 {
+	if this == InvalidWord {
+		return defaultValue
+	} else {
+		return uint16(this)
+	}
+}
+
 //endregion
 
-//region Word
+//region DWord
 func (this *DWord) String() string { return strconv.FormatUint(uint64(*this), 10) }
 func (this *DWord) Set(value string) error {
 	n, err := strconv.Atoi(value)
@@ -262,6 +270,15 @@ func (this *DWord) Set(value string) error {
 
 	*this = DWord(n)
 	return nil
+}
+
+func (this DWord) Value() uint32 { return uint32(this) }
+func (this DWord) ValueOr(defaultValue uint32) uint32 {
+	if this == InvalidDWord {
+		return defaultValue
+	} else {
+		return uint32(this)
+	}
 }
 
 //endregion
@@ -291,7 +308,8 @@ func (this *Bool3) Set(value string) error {
 	}
 	return nil
 }
-func (this Bool3) Bool(defaultValue bool) bool {
+func (this Bool3) Bool() bool { return this == True }
+func (this Bool3) BoolOr(defaultValue bool) bool {
 	if this == None {
 		return defaultValue
 	} else {

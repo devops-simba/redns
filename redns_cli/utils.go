@@ -101,7 +101,7 @@ func GetRedisKey(domain string, name string) string {
 	if name == "@" {
 		return domain
 	} else if name == "*" {
-		return "$." + name
+		return "$." + domain
 	} else {
 		return name + "." + domain
 	}
@@ -136,7 +136,7 @@ func IsIPv6(value string) bool {
 }
 
 // ParseSRV parse a string as a SRV record value
-func ParseSRV(value string) (string, Word, error) {
+func ParseSRV(value string) (string, uint16, error) {
 	parts := strings.Split(value, ":")
 	if len(parts) != 2 || !IsDomainName(parts[0]) {
 		return "", 0, errors.New("Invalid SRV value(must be <domain_name>:<port>")
@@ -146,94 +146,5 @@ func ParseSRV(value string) (string, Word, error) {
 		return "", 0, errors.New("Invalid port number")
 	}
 
-	return parts[0], Word(port), nil
-}
-
-// AddIPAddress add a new IP address to an IP record, return added IP address and a flag that
-// indicate whether IP added as a new address(`true`) or it was an existing one(`false`)
-func AddIPAddress(prec **definitions.DNS_IP_Record, ip string) (*definitions.DNS_IP_Address, bool) {
-	if *prec == nil {
-		*prec = &definitions.DNS_IP_Record{}
-	}
-	rec := *prec
-	for i := 0; i < len(rec.Addresses); i++ {
-		if rec.Addresses[i].IP == ip {
-			return &rec.Addresses[i], false
-		}
-	}
-
-	rec.Addresses = append(rec.Addresses, definitions.DNS_IP_Address{
-		DNS_Address: baseDnsAddress,
-		IP:          ip,
-	})
-
-	return &rec.Addresses[len(rec.Addresses)-1], true
-}
-
-// AddSTRAddress add a new STRING to a DNS string record. return added address and a flag that
-// indicate whether this is a new address(`true`) or it was an existing one(`false`)
-func AddSTRAddress(prec **definitions.DNS_STRING_Record, value string, forceAdd bool) (*definitions.DNS_STRING_Address, bool) {
-	if *prec == nil {
-		*prec = &definitions.DNS_STRING_Record{}
-	}
-	rec := *prec
-	if !forceAdd {
-		for i := 0; i < len(rec.Addresses); i++ {
-			if rec.Addresses[i].Value == value {
-				return &rec.Addresses[i], false
-			}
-		}
-	}
-
-	rec.Addresses = append(rec.Addresses, definitions.DNS_STRING_Address{
-		DNS_Address: baseDnsAddress,
-		Value:       value,
-	})
-
-	return &rec.Addresses[len(rec.Addresses)-1], true
-}
-
-// AddSTRAddress add a new MX address to a DNS MX record. return added address and a flag that
-// indicate whether this is a new address(`true`) or it was an existing one(`false`)
-func AddMXAddress(prec **definitions.DNS_MX_Record, value string) (*definitions.DNS_MX_Address, bool) {
-	if *prec == nil {
-		*prec = &definitions.DNS_MX_Record{}
-	}
-	rec := *prec
-
-	for i := 0; i < len(rec.Addresses); i++ {
-		if rec.Addresses[i].Value == value {
-			return &rec.Addresses[i], false
-		}
-	}
-
-	rec.Addresses = append(rec.Addresses, definitions.DNS_MX_Address{
-		DNS_Address: baseDnsAddress,
-		Value:       value,
-	})
-
-	return &rec.Addresses[len(rec.Addresses)-1], true
-}
-
-// AddSRVAddress add a new SRV address to a DNS SRV record. return added address and a flag that
-// indicate whether this is a new address(`true`) or it was an existing one(`false`)
-func AddSRVAddress(prec **definitions.DNS_SRV_Record, server string, port uint16) (*definitions.DNS_SRV_Address, bool) {
-	if *prec == nil {
-		*prec = &definitions.DNS_SRV_Record{}
-	}
-	rec := *prec
-
-	for i := 0; i < len(rec.Addresses); i++ {
-		if rec.Addresses[i].Value == server && rec.Addresses[i].Port == port {
-			return &rec.Addresses[i], false
-		}
-	}
-
-	rec.Addresses = append(rec.Addresses, definitions.DNS_SRV_Address{
-		DNS_Address: baseDnsAddress,
-		Value:       server,
-		Port:        port,
-	})
-
-	return &rec.Addresses[len(rec.Addresses)-1], true
+	return parts[0], uint16(port), nil
 }
