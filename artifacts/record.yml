@@ -1,0 +1,73 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: dnsrecord.devops.snapp.ir
+spec:
+  group: devops.snapp.ir
+  scope: Clustered
+  names:
+    plural: dnsrecords
+    singular: dnsrecord
+    kind: DNSRecord
+    shortnames:
+    - rec
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              domain:
+                type: string    # Require a validating webhook
+                pattern: '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$'
+              name:
+                type: string
+                pattern: '^(@|\*|((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]))$'
+              type:
+                type: string
+                enum: ['A', 'AAAA', 'NS', 'CNAME', 'TXT', 'MX', 'SRV']
+              value:
+                type: string
+              weight:
+                type: int32
+                minimum: 0
+                maximum: 100
+                default: 1
+              ttl:
+                type: int32
+                minimum: 0
+                maximum: 65534
+                default: 30
+              priority:
+                type: int32
+                minimum: 0
+                maximum: 65534
+              enabled:
+                type: boolean
+                default: true
+              healthCheck:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    enum: ['icmp', 'tcp', 'http']
+                  server:
+                    type: string
+                required: ["type", "server"]
+                preserveUnknownFields: false
+            required: ["domain", "name", "type", "value"]
+            preserveUnknownFields: false
+          status:
+            type: object
+            properties:
+              generation:
+                type: string
+        required: ["spec"]
+    subresources:
+      status: {}
