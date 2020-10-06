@@ -5,34 +5,53 @@ import (
 
 	log "github.com/golang/glog"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
-
-	rednsclientset "github.com/devops-simba/redns/controller/pkg/apis/redns/client/clientset/versioned"
+	"github.com/devops-simba/redns/definitions/signals"
 )
 
-func createClients() (kubernetes.Interface, rednsclientset.Interface) {
-	kubeConfigPath := os.Getenv("HOME") + "/.kube/config"
+func main() {
+	controller := createController()
 
-	// create the config from path
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	err := controller.Start()
 	if err != nil {
-		log.Fatalf("Failed to load kube config: %v", err)
+		log.Fatalf("Failed to start controller: %v", err)
 	}
 
-	client, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("Faild to create kubernetes client: %v", err)
-	}
+	waitForStop()
+	log.Infof("Received stop signal, stopping the controller")
 
-	rednsClient, err := rednsclientset.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("Failed to create redns client: %v", err)
-	}
-
-	return client, rednsClient
+	controller.Stop()
 }
 
-func main() {
-	var rednsClient rednsclientset.Interface
+func createController() *Controller {
+	kubeConfig := os.Getenv("KUBECONFIG_PATH")
+	if kubeConfig == "" {
+		kubeConfig = os.Getenv("HOME") + "/.kube/config"
+	}
+
+	nodeId := os.Getenv("NODE_ID")
+	if nodeId == "" {
+		log.Fatalf("Missing node ID, please set NODE_ID env")
+	}
+
+	redisUrl := os.Getenv("REDIS_URL")
+	if redisUrl == "" {
+		log.Fatalf("Missing redis URL, please set REDIS_URL env")
+	}
+
+	controller, err := NewController(kubeConfig, nodeId, "redns-lock", "default")
+	if err != nil {
+		log.Fatalf("Failed to create the controller: %v", err)
+	}
+
+	return controller
+}
+func waitForStop() {
+	stopped := make(chan struct{})
+	signals.SetupSignalHandler(1)
+
+	<-stopped
+}
+
+func parseRedisUrl(redisUrl string) {
+
 }
