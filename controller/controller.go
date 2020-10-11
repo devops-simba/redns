@@ -1,113 +1,102 @@
 package main
 
 import (
-	"context"
-	"sync/atomic"
+	"k8s.io/client-go/kubernetes"
+	"sync"
 	"time"
 
-	log "github.com/golang/glog"
+	"github.com/hoisie/redis"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	rednsclientset "github.com/devops-simba/redns/definitions/client/clientset/versioned"
 )
 
+const (
+	maxRetries = 5
+
+	stoppedStatus int32 = 0
+	runningStatus int32 = 1
+	leaderStatus  int32 = 2
+
+	startingStatus int32 = 10
+	stoppingStatus int32 = 11
+)
+
+type eventType struct {
+	Key          string
+	EventType    string
+	Namespace    string
+	ResourceType string
+}
+
 type Controller struct {
-	NodeId      string
-	Client      kubernetes.Interface
-	RednsClient rednsclientset.Interface
-
-	isLeader int32
-	cancel   func()
-	lock     *resourcelock.LeaseLock
+	// this will be used to update REDNS objects in the REDIS
+	redisClient *redis.Client
+	// this will be used to update REDNS objects in the REDIS
+	rednsClient rednsclientset.Interface
+	// a flag that indicate we are leader
+	leader int32
+	// this function will be called to stop leader elector
+	stopFunc func()
+	// this will be used to stop informers
+	stopChannel chan struct{}
+	// this will be used to watch for changes in DNSRecord objects
+	recordInformer cache.SharedIndexInformer
+	// this will be used to watch for changes in DNSLoadBalancer objects
+	loadbalancerInformer cache.SharedIndexInformer
+	// this will be used to wait for completion of different parts
+	stopped sync.WaitGroup
 }
 
-func NewController(configPath string, nodeId string, lockName string, redisUrl string) (*Controller, error) {
-	result := &Controller{NodeId: nodeId}
+func NewController(options *ControllerOptions) (*Controller, error) {
+	controller := &Controller{}
 
-	config, err := clientcmd.BuildConfigFromFlags("", configPath)
+	var err error
+	controller.rednsClient, err = rednsclientset.NewForConfig(options.KubeConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	result.Client, err = kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-
-	result.RednsClient, err = rednsclientset.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-
-	result.lock = &resourcelock.LeaseLock{
-		LeaseMeta:  metav1.ObjectMeta{Name: lockName, Namespace: ns},
-		Client:     result.Client.CoordinationV1(),
-		LockConfig: resourcelock.ResourceLockConfig{Identity: nodeId},
-	}
-
-	return result, nil
+	return controller, nil
 }
 
+//region Leader Election
 func (this *Controller) onBecomeLeader() {
-	if atomic.SwapInt32(&this.isLeader, 1) == 0 {
-		log.Infof("%s: Start working as the leader", this.NodeId)
-		// start looking for changed resources
-	}
+	//
 }
-func (this *Controller) onStoppedLeading() bool {
-	if atomic.SwapInt32(&this.isLeader, 0) == 1 {
-		log.Infof("%s: We are not leader anymore", this.NodeId)
-		// stop looking for changed resources
-		return true
-	} else {
-		return false
-	}
+func (this *Controller) onStoppedLeading() {
+	//
 }
-func (this *Controller) onLeaderChanged(leaderId string) {
-	if leaderId == this.NodeId {
-		this.onBecomeLeader()
-	} else if !this.onStoppedLeading() {
-		log.Infof("Leader changed to `%s`", leaderId)
-	}
-}
-
-func (this *Controller) Start() error {
-	lec := leaderelection.LeaderElectionConfig{
-		Lock:            this.lock,
+func (this *Controller) startLeaderElector(options *ControllerOptions) error {
+	restConfig, err := kubernetes.NewForConfig(options.)
+	config := leaderelection.LeaderElectionConfig{
+		Lock: &resourcelock.LeaseLock{
+			Client:     result.Client.CoordinationV1(),
+			LeaseMeta:  metav1.ObjectMeta{Name: options.LockName, Namespace: rest.NamespaceNone},
+			LockConfig: resourcelock.ResourceLockConfig{Identity: options.NodeId},
+		},
 		ReleaseOnCancel: true,
 		LeaseDuration:   15 * time.Second,
 		RenewDeadline:   10 * time.Second,
 		RetryPeriod:     2 * time.Second,
 		Callbacks: leaderelection.LeaderCallbacks{
-			OnStartedLeading: func(c context.Context) { this.onBecomeLeader() },
-			OnStoppedLeading: func() { this.onStoppedLeading() },
-			OnNewLeader:      func(id string) { this.onLeaderChanged(id) },
+			OnStartedLeading: onBecomeLeader,
+			OnStoppedLeading: onStoppedLeading,
+			OnNewLeader: func(id string) {
+				if id == lock.LockConfig.Identity {
+					onBecomeLeader(nil)
+				} else if this.IsLeader {
+					onStoppedLeading()
+				} else {
+					this.Callbacks.OnLeaderChanged(id)
+				}
+			},
 		},
 	}
-
-	le, err := leaderelection.NewLeaderElector(lec)
-	if err != nil {
-		return err
-	}
-
-	var ctx context.Context
-	ctx, this.cancel = context.WithCancel(context.Background())
-	go le.Run(ctx)
-
-	return nil
 }
-func (this *Controller) Stop() {
-	this.cancel()
-	for {
-		// wait until we are not leader anymore
-		if atomic.LoadInt32(&this.isLeader) == 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
+
+//endregion
